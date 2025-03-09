@@ -1,0 +1,63 @@
+import cv2
+import mediapipe as mp
+import time
+
+# Initialize mediapipe face mesh
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+# Start video capture
+cap = cv2.VideoCapture(0)
+
+# Timer for updates
+last_update_time = time.time()
+mouth_open_threshold = 0.03  # Mouth open sensitivity
+
+while cap.isOpened():
+    success, image = cap.read()
+    if not success:
+        break
+
+    # Preprocess image
+    image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
+    image.flags.writeable = False
+    results = face_mesh.process(image)
+    image.flags.writeable = True
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+    img_h, img_w, _ = image.shape
+
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            # Extract landmarks for mouth state
+            upper_lip = face_landmarks.landmark[13]
+            lower_lip = face_landmarks.landmark[14]
+            lip_distance = lower_lip.y - upper_lip.y
+
+            # Determine mouth state
+            mouth_state = "Open" if lip_distance > mouth_open_threshold else "Closed"
+
+            # Print mouth state every 1 second
+            current_time = time.time()
+            if current_time - last_update_time >= 1:
+                print(f"Mouth State: {mouth_state}")
+                last_update_time = current_time
+
+            # Draw landmarks for mouth state
+            for idx, lm in enumerate(face_landmarks.landmark):
+                x, y = int(lm.x * img_w), int(lm.y * img_h)
+                cv2.circle(image, (x, y), 1, (0, 255, 0), -1)
+
+            # Display mouth state on the frame
+            cv2.putText(image, f"Mouth: {mouth_state}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
+    # Show the image with landmarks
+    cv2.imshow('Mouth State Detection', image)
+
+    # Break on 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Cleanup
+cap.release()
+cv2.destroyAllWindows()
